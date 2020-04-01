@@ -31,6 +31,7 @@
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -790,6 +791,22 @@ void GazeboRosCamera::PreRender()
 
 void GazeboRosCamera::OnTrigger(const std_msgs::msg::Empty::SharedPtr)
 {
+  uint64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+  RCLCPP_INFO(impl_->ros_node_->get_logger(), "CAMERA CONTROLLER received message at %lu ms", now_ms);
+
+  sem_t *sem = sem_open("/pc_pipe_sem", O_CREAT, 0600, 1);
+  if (sem != SEM_FAILED) {
+    if (sem_wait(sem) == 0) {
+      FILE *fp = fopen("/tmp/pc_pipe_times.csv", "a");
+      if (fp != NULL) {
+        fprintf(fp, "\"CAMERA CONTROLLER SUB\", %lu\n", now_ms);
+        fclose(fp);
+      }
+      sem_post(sem);
+    }
+    sem_close(sem);
+  }
+
   std::lock_guard<std::mutex> lock(impl_->trigger_mutex_);
   impl_->triggered++;
 }
